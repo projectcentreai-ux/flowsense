@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowSense — IoT Dashboard</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+    <style>
+        /* ========== CSS Reset & Variables ========== */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #0d0d15;
+            --bg-card: #12121c;
+            --bg-card-hover: #181828;
+            --border-color: #1a1a2e;
+            --border-glow: #00f0ff;
+            --text-primary: #e0e0ff;
+            --text-secondary: #8888aa;
+            --text-dim: #555577;
+            --accent-cyan: #00f0ff;
+            --accent-purple: #b347d9;
+            --accent-pink: #ff2d75;
+            --accent-green: #00ff88;
+            --accent-orange: #ff8800;
+            --accent-yellow: #ffdd00;
+            --accent-blue: #4488ff;
+            --gradient-main: linear-gradient(135deg, #00f0ff, #b347d9);
+            --gradient-warm: linear-gradient(135deg, #ff2d75, #ff8800);
+            --gradient-cool: linear-gradient(135deg, #00ff88, #00f0ff);
+            --shadow-cyan: 0 0 30px rgba(0, 240, 255, 0.15);
+            --shadow-purple: 0 0 30px rgba(179, 71, 217, 0.15);
+            --font-display: 'Orbitron', monospace;
+            --font-body: 'Rajdhani', sans-serif;
+            --font-mono: 'Share Tech Mono', monospace;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        /* ========== Scrollbar ========== */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--accent-cyan);
+            border-radius: 3px;
+        }
+
+        /* ========== Animated Background ========== */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .bg-animation .grid {
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            top: -50%;
+            left: -50%;
+            background-image:
+                linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            100% { transform: translate(60px, 60px) rotate(0deg); }
+        }
+
+        .bg-animation .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            animation: orbFloat 15s ease-in-out infinite;
+        }
+
+        .bg-animation .orb:nth-child(2) {
+            width: 400px;
+            height: 400px;
+            background: var(--accent-cyan);
+            top: 10%;
+            right: -10%;
+            animation-delay: 0s;
+        }
+
+        .bg-animation .orb:nth-child(3) {
+            width: 350px;
+            height: 350px;
+            background: var(--accent-purple);
+            bottom: 10%;
+            left: -10%;
+            animation-delay: -5s;
+        }
+
+        .bg-animation .orb:nth-child(4) {
+            width: 250px;
+            height: 250px;
+            background: var(--accent-pink);
+            top: 50%;
+            left: 50%;
+            animation-delay: -10s;
+        }
+
+        @keyframes orbFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(50px, -30px) scale(1.1); }
+            50% { transform: translate(-30px, 50px) scale(0.9); }
+            75% { transform: translate(30px, 30px) scale(1.05); }
+        }
+
+        /* ========== Particle Canvas ========== */
+        #particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* ========== Intro Screen ========== */
+        .intro-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10000;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
+        }
+
+        .intro-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .intro-logo-container {
+            position: relative;
+            margin-bottom: 40px;
+        }
+
+        .intro-hex {
+            width: 150px;
+            height: 150px;
+            position: relative;
+            animation: introSpin 3s ease-in-out infinite;
+        }
+
+        .intro-hex svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .intro-hex .hex-path {
+            fill: none;
+            stroke: var(--accent-cyan);
+            stroke-width: 2;
+            stroke-dasharray: 600;
+            stroke-dashoffset: 600;
+            animation: hexDraw 2s ease forwards;
+            filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.5));
+        }
+
+        @keyframes hexDraw {
+            to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes introSpin {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(5deg); }
+        }
+
+        .intro-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 50px;
+            animation: introIconPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes introIconPulse {
+            0%, 100% { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+        }
+
+        .intro-title {
+            font-family: var(--font-display);
+            font-size: 3rem;
+            font-weight: 900;
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            opacity: 0;
+            animation: introFadeUp 1s ease forwards 0.5s;
+        }
+
+        .intro-subtitle {
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+            font-size: 1rem;
+            letter-spacing: 4px;
+            margin-top: 10px;
+            opacity: 0;
+            animation: introFadeUp 1s ease forwards 0.8s;
+        }
+
+        .intro-loading {
+            margin-top: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            opacity: 0;
+            animation: introFadeUp 1s ease forwards 1.2s;
+        }
+
+        .intro-loading-bar {
+            width: 250px;
+            height: 3px;
+            background: var(--border-color);
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .intro-loading-bar .fill {
+            height: 100%;
+            background: var(--gradient-main);
+            border-radius: 3px;
+            animation: introLoad 2.5s ease forwards 1.5s;
+            width: 0%;
+            box-shadow: 0 0 15px var(--accent-cyan);
+        }
+
+        @keyframes introLoad {
+            to { width: 100%; }
+        }
+
+        .intro-loading-text {
+            font-family: var(--font-mono);
+            color: var(--accent-cyan);
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+        }
+
+        .intro-loading-text span {
+            animation: introTextBlink 0.5s step-end infinite;
+        }
+
+        @keyframes introTextBlink {
+            50% { opacity: 0; }
+        }
+
+        @keyframes introFadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .intro-particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .intro-particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+            animation: introParticleFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes introParticleFloat {
+            0%, 100% { opacity: 0; transform: translateY(0); }
+            50% { opacity: 1; }
+            100% { transform: translateY(-100vh); }
+        }
+
+        /* ========== Main Container ========== */
+        .main-container {
+            position: relative;
+            z-index: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* ========== Header ========== */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 30px;
+            background: rgba(18, 18, 28, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--gradient-main);
+            opacity: 0.5;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--gradient-main);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.2);
+            animation: logoPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes logoPulse {
+            0%, 100% { box-shadow: 0 0 25px rgba(0, 240, 255, 0.2); }
+            50% { box-shadow: 0 0 40px rgba(0, 240, 255, 0.4); }
+        }
+
+        .logo-text h1 {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 3px;
+        }
+
+        .logo-text p {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            letter-spacing: 2px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 18px;
+            background: rgba(0, 255, 136, 0.08);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            border-radius: 30px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--accent-green);
+            letter-spacing: 1px;
+        }
+
+        .status-badge.offline {
+            background: rgba(255, 45, 117, 0.08);
+            border-color: rgba(255, 45, 117, 0.2);
+            color: var(--accent-pink);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+
+        .status-badge.offline .status-dot {
+            background: var(--accent-pink);
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 5px currentColor; }
+            50% { opacity: 0.5; box-shadow: 0 0 15px currentColor; }
+        }
+
+        .clock {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+        }
+
+        /* ========== Dashboard Grid ========== */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        /* ========== Metric Card ========== */
+        .metric-card {
+            background: rgba(18, 18, 28, 0.7);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 25px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            cursor: default;
+        }
+
+        .metric-card:hover {
+            border-color: var(--border-glow);
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-cyan);
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .metric-card.cyan::before { background: var(--accent-cyan); box-shadow: 0 0 20px var(--accent-cyan); }
+        .metric-card.purple::before { background: var(--accent-purple); box-shadow: 0 0 20px var(--accent-purple); }
+        .metric-card.green::before { background: var(--accent-green); box-shadow: 0 0 20px var(--accent-green); }
+        .metric-card.pink::before { background: var(--accent-pink); box-shadow: 0 0 20px var(--accent-pink); }
+        .metric-card.orange::before { background: var(--accent-orange); box-shadow: 0 0 20px var(--accent-orange); }
+        .metric-card.blue::before { background: var(--accent-blue); box-shadow: 0 0 20px var(--accent-blue); }
+
+        .metric-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .metric-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .metric-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .metric-card.cyan .metric-icon { background: rgba(0, 240, 255, 0.1); }
+        .metric-card.purple .metric-icon { background: rgba(179, 71, 217, 0.1); }
+        .metric-card.green .metric-icon { background: rgba(0, 255, 136, 0.1); }
+        .metric-card.pink .metric-icon { background: rgba(255, 45, 117, 0.1); }
+        .metric-card.orange .metric-icon { background: rgba(255, 136, 0, 0.1); }
+        .metric-card.blue .metric-icon { background: rgba(68, 136, 255, 0.1); }
+
+        .metric-value {
+            font-family: var(--font-display);
+            font-size: 2.2rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .metric-card.cyan .metric-value { color: var(--accent-cyan); }
+        .metric-card.purple .metric-value { color: var(--accent-purple); }
+        .metric-card.green .metric-value { color: var(--accent-green); }
+        .metric-card.pink .metric-value { color: var(--accent-pink); }
+        .metric-card.orange .metric-value { color: var(--accent-orange); }
+        .metric-card.blue .metric-value { color: var(--accent-blue); }
+
+        .metric-unit {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+        }
+
+        /* Value update flash animation */
+        .metric-value.flash {
+            animation: valueFlash 0.5s ease;
+        }
+
+        @keyframes valueFlash {
+            0% { opacity: 0.5; transform: scale(1.05); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        /* ========== Charts Section ========== */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: rgba(18, 18, 28, 0.7);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 25px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--gradient-main);
+            opacity: 0.3;
+        }
+
+        .chart-title {
+            font-family: var(--font-display);
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-title .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .chart-title .dot.cyan { background: var(--accent-cyan); box-shadow: 0 0 10px var(--accent-cyan); }
+        .chart-title .dot.orange { background: var(--accent-orange); box-shadow: 0 0 10px var(--accent-orange); }
+
+        .chart-container {
+            width: 100%;
+            height: 200px;
+            position: relative;
+        }
+
+        .chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* ========== System Info Section ========== */
+        .system-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .system-card {
+            background: rgba(18, 18, 28, 0.7);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 25px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .system-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: var(--gradient-main);
+            opacity: 0.2;
+        }
+
+        .system-title {
+            font-family: var(--font-display);
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+
+        .system-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .system-item:last-child {
+            border-bottom: none;
+        }
+
+        .system-item-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+        }
+
+        .system-item-value {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--accent-cyan);
+        }
+
+        /* ========== Gauge Component ========== */
+        .gauge-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .gauge-svg {
+            width: 150px;
+            height: 90px;
+        }
+
+        .gauge-bg {
+            fill: none;
+            stroke: var(--border-color);
+            stroke-width: 10;
+            stroke-linecap: round;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke-width: 10;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease;
+            filter: drop-shadow(0 0 6px currentColor);
+        }
+
+        .gauge-fill.cyan { stroke: var(--accent-cyan); }
+        .gauge-fill.purple { stroke: var(--accent-purple); }
+
+        .gauge-text {
+            font-family: var(--font-display);
+            font-size: 1.2rem;
+            fill: var(--text-primary);
+            text-anchor: middle;
+            dominant-baseline: middle;
+        }
+
+        .gauge-label {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+        }
+
+        /* ========== Alert Bar ========== */
+        .alert-bar {
+            background: rgba(255, 45, 117, 0.08);
+            border: 1px solid rgba(255, 45, 117, 0.2);
+            border-radius: 15px;
+            padding: 15px 25px;
+            margin-bottom: 30px;
+            display: none;
+            align-items: center;
+            gap: 12px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--accent-pink);
+            animation: alertPulse 2s ease-in-out infinite;
+        }
+
+        .alert-bar.show {
+            display: flex;
+        }
+
+        @keyframes alertPulse {
+            0%, 100% { border-color: rgba(255, 45, 117, 0.2); }
+            50% { border-color: rgba(255, 45, 117, 0.5); }
+        }
+
+        /* ========== Data Log Table ========== */
+        .log-card {
+            background: rgba(18, 18, 28, 0.7);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+
+        .log-title {
+            font-family: var(--font-display);
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .log-table th {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-align: left;
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .log-table td {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            padding: 10px 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+        }
+
+        .log-table tr:hover td {
+            color: var(--text-primary);
+            background: rgba(0, 240, 255, 0.02);
+        }
+
+        /* ========== Footer ========== */
+        .footer {
+            text-align: center;
+            padding: 30px;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            letter-spacing: 2px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .footer a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+
+        /* ========== Responsive ========== */
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            .system-grid {
+                grid-template-columns: 1fr;
+            }
+            .header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+            .header-right {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            .intro-title {
+                font-size: 1.8rem;
+                letter-spacing: 4px;
+            }
+            .metric-value {
+                font-size: 1.8rem;
+            }
+        }
+
+        /* ========== Loading Shimmer ========== */
+        .shimmer {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .shimmer::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(0, 240, 255, 0.03),
+                transparent
+            );
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            to { left: 100%; }
+        }
+
+        /* ========== Connection Scanner Line ========== */
+        .scanner-line {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: var(--gradient-main);
+            opacity: 0;
+            animation: scannerMove 4s ease-in-out infinite;
+        }
+
+        @keyframes scannerMove {
+            0% { left: -100%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { left: 100%; opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ========== Intro Screen ========== -->
+    <div class="intro-screen" id="introScreen">
+        <div class="intro-particles" id="introParticles"></div>
+        <div class="intro-logo-container">
+            <div class="intro-hex">
+                <svg viewBox="0 0 150 150">
+                    <polygon class="hex-path" points="75,5 140,40 140,110 75,145 10,110 10,40" />
+                </svg>
+                <div class="intro-icon">💧⚡</div>
+            </div>
+        </div>
+        <div class="intro-title">FLOWSENSE</div>
+        <div class="intro-subtitle">IoT MONITORING SYSTEM v1.0</div>
+        <div class="intro-loading">
+            <div class="intro-loading-bar">
+                <div class="fill"></div>
+            </div>
+            <div class="intro-loading-text">
+                INITIALIZING SYSTEMS<span>_</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== Background Animation ========== -->
+    <div class="bg-animation">
+        <div class="grid"></div>
+        <div class="orb"></div>
+        <div class="orb"></div>
+        <div class="orb"></div>
+    </div>
+
+    <canvas id="particles"></canvas>
+
+    <!-- ========== Main Content ========== -->
+    <div class="main-container" id="mainContent" style="opacity: 0; transition: opacity 1s ease;">
+
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo-icon">💧</div>
+                <div class="logo-text">
+                    <h1>FLOWSENSE</h1>
+                    <p>REAL-TIME IoT MONITORING</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="status-badge" id="statusBadge">
+                    <div class="status-dot"></div>
+                    <span id="statusText">CONNECTING</span>
+                </div>
+                <div class="clock" id="clock">--:--:--</div>
+            </div>
+            <div class="scanner-line"></div>
+        </header>
+
+        <!-- Alert Bar -->
+        <div class="alert-bar" id="alertBar">
+            <span>⚠️</span>
+            <span id="alertText">High current detected! Check your system.</span>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="dashboard-grid">
+            <!-- Flow Rate -->
+            <div class="metric-card cyan shimmer">
+                <div class="metric-header">
+                    <span class="metric-label">FLOW RATE</span>
+                    <div class="metric-icon">💧</div>
+                </div>
+                <div class="metric-value" id="flowRate">0.00</div>
+                <div class="metric-unit">LITERS / MIN</div>
+            </div>
+
+            <!-- Total Volume -->
+            <div class="metric-card purple shimmer">
+                <div class="metric-header">
+                    <span class="metric-label">TOTAL VOLUME</span>
+                    <div class="metric-icon">🌊</div>
+                </div>
+                <div class="metric-value" id="totalLiters">0.000</div>
+                <div class="metric-unit">LITERS</div>
+            </div>
+
+            <!-- Current -->
+            <div class="metric-card green shimmer">
+                <div class="metric-header">
+                    <span class="metric-label">CURRENT</span>
+                    <div class="metric-icon">⚡</div>
+                </div>
+                <div class="metric-value" id="currentAmps">0.000</div>
+                <div class="metric-unit">AMPERES</div>
+            </div>
+
+            <!-- Power -->
+            <div class="metric-card orange shimmer">
+                <div class="metric-header">
+                    <span class="metric-label">POWER</span>
+                    <div class="metric-icon">🔌</div>
+                </div>
+                <div class="metric-value" id="power">0.00</div>
+                <div class="metric-unit">WATTS</div>
+            </div>
+
+            <!-- Voltage -->
+            <div class="metric-card blue shimmer">
+                <div class="metric-header">
+                    <span class="metric-label">VOLTAGE</span>
+                    <div class="metric-icon">🔋</div>
+                </div>
+                <div class="metric-value" id="voltage">0.0</div>
+                <div class="metric-unit">VOLTS</div>
+            </div>
+
+            <!-- Energy -->
+            <div class="metric-card pink shimmer">
+                <div class="metric-header">
+                    <span class="metric-label">ENERGY</span>
+                    <div class="metric-icon">📊</div>
+                </div>
+                <div class="metric-value" id="energy">0.0000</div>
+                <div class="metric-unit">kWh</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-title">
+                    <div class="dot cyan"></div>
+                    FLOW RATE HISTORY
+                </div>
+                <div class="chart-container">
+                    <canvas id="flowChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">
+                    <div class="dot orange"></div>
+                    CURRENT HISTORY
+                </div>
+                <div class="chart-container">
+                    <canvas id="currentChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Info -->
+        <div class="system-grid">
+            <!-- Device Info -->
+            <div class="system-card">
+                <div class="system-title">📡 DEVICE INFO</div>
+                <div class="system-item">
+                    <span class="system-item-label">STATUS</span>
+                    <span class="system-item-value" id="sysStatus">--</span>
+                </div>
+                <div class="system-item">
+                    <span class="system-item-label">IP ADDRESS</span>
+                    <span class="system-item-value" id="sysIP">--</span>
+                </div>
+                <div class="system-item">
+                    <span class="system-item-label">UPTIME</span>
+                    <span class="system-item-value" id="sysUptime">--</span>
+                </div>
+            </div>
+
+            <!-- Network Info -->
+            <div class="system-card">
+                <div class="system-title">📶 NETWORK</div>
+                <div class="system-item">
+                    <span class="system-item-label">WIFI RSSI</span>
+                    <span class="system-item-value" id="sysRSSI">--</span>
+                </div>
+                <div class="system-item">
+                    <span class="system-item-label">FREE HEAP</span>
+                    <span class="system-item-value" id="sysHeap">--</span>
+                </div>
+                <div class="system-item">
+                    <span class="system-item-label">LAST UPDATE</span>
+                    <span class="system-item-value" id="sysLastUpdate">--</span>
+                </div>
+            </div>
+
+            <!-- Gauges -->
+            <div class="system-card">
+                <div class="system-title">📈 GAUGES</div>
+                <div style="display: flex; justify-content: space-around; padding-top: 10px;">
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 150 90">
+                            <path class="gauge-bg" d="M 15 80 A 60 60 0 0 1 135 80" />
+                            <path class="gauge-fill cyan" id="flowGauge" d="M 15 80 A 60 60 0 0 1 135 80"
+                                  stroke-dasharray="188" stroke-dashoffset="188" />
+                            <text class="gauge-text" x="75" y="70" id="flowGaugeText">0%</text>
+                        </svg>
+                        <span class="gauge-label">FLOW</span>
+                    </div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 150 90">
+                            <path class="gauge-bg" d="M 15 80 A 60 60 0 0 1 135 80" />
+                            <path class="gauge-fill purple" id="currentGauge" d="M 15 80 A 60 60 0 0 1 135 80"
+                                  stroke-dasharray="188" stroke-dashoffset="188" />
+                            <text class="gauge-text" x="75" y="70" id="currentGaugeText">0%</text>
+                        </svg>
+                        <span class="gauge-label">CURRENT</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Log -->
+        <div class="log-card">
+            <div class="log-title">
+                <span>📋</span>
+                RECENT DATA LOG
+            </div>
+            <div style="overflow-x: auto;">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Flow (L/min)</th>
+                            <th>Current (A)</th>
+                            <th>Power (W)</th>
+                            <th>Total (L)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logTableBody">
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: var(--text-dim);">
+                                Waiting for data...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            FLOWSENSE IoT MONITORING SYSTEM &copy; 2024 &mdash; POWERED BY
+            <a href="https://firebase.google.com" target="_blank">FIREBASE</a> &amp; ESP32
+        </footer>
+
+    </div>
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <script>
+        // ===================================================================
+        //  FIREBASE INITIALIZATION
+        // ===================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCFZk2wwfPRj7q-Y8pHHKH_pRceL0y8UY0",
+            authDomain: "flow-sense-17d56.firebaseapp.com",
+            databaseURL: "https://flow-sense-17d56-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "flow-sense-17d56",
+            storageBucket: "flow-sense-17d56.firebasestorage.app",
+            messagingSenderId: "1021112204974",
+            appId: "1:1021112204974:web:e0d7ef5678f4eb025ff73f"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // ===================================================================
+        //  INTRO SCREEN
+        // ===================================================================
+        function createIntroParticles() {
+            const container = document.getElementById('introParticles');
+            for (let i = 0; i < 30; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'intro-particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.top = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 3 + 's';
+                particle.style.animationDuration = (2 + Math.random() * 3) + 's';
+                if (Math.random() > 0.5) {
+                    particle.style.background = '#b347d9';
+                }
+                container.appendChild(particle);
+            }
+        }
+
+        createIntroParticles();
+
+        // Hide intro after animation
+        setTimeout(() => {
+            document.getElementById('introScreen').classList.add('hidden');
+            document.getElementById('mainContent').style.opacity = '1';
+        }, 4500);
+
+        // ===================================================================
+        //  PARTICLE BACKGROUND
+        // ===================================================================
+        const canvas = document.getElementById('particles');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 0.3;
+                this.vy = (Math.random() - 0.5) * 0.3;
+                this.radius = Math.random() * 1.5 + 0.5;
+                this.opacity = Math.random() * 0.3 + 0.1;
+                this.color = Math.random() > 0.5 ? '0, 240, 255' : '179, 71, 217';
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${this.color}, ${this.opacity})`;
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            const count = Math.min(80, Math.floor((canvas.width * canvas.height) / 15000));
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            // Draw connections
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 120) {
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.strokeStyle = `rgba(0, 240, 255, ${0.05 * (1 - dist / 120)})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            requestAnimationFrame(animateParticles);
+        }
+
+        initParticles();
+        animateParticles();
+
+        // ===================================================================
+        //  CLOCK
+        // ===================================================================
+        function updateClock() {
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // ===================================================================
+        //  CHARTS SETUP
+        // ===================================================================
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 500 },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(10, 10, 15, 0.9)',
+                    titleColor: '#00f0ff',
+                    bodyColor: '#e0e0ff',
+                    borderColor: '#1a1a2e',
+                    borderWidth: 1,
+                    cornerRadius: 10,
+                    titleFont: { family: 'Share Tech Mono' },
+                    bodyFont: { family: 'Share Tech Mono' }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
+                    ticks: {
+                        color: '#555577',
+                        font: { family: 'Share Tech Mono', size: 9 },
+                        maxTicksLimit: 8
+                    }
+                },
+                y: {
+                    display: true,
+                    grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
+                    ticks: {
+                        color: '#555577',
+                        font: { family: 'Share Tech Mono', size: 9 }
+                    },
+                    beginAtZero: true
+                }
+            },
+            elements: {
+                point: { radius: 2, hoverRadius: 5 },
+                line: { tension: 0.4, borderWidth: 2 }
+            }
+        };
+
+        // Flow Chart
+        const flowChart = new Chart(document.getElementById('flowChart'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Flow Rate',
+                    data: [],
+                    borderColor: '#00f0ff',
+                    backgroundColor: 'rgba(0, 240, 255, 0.05)',
+                    fill: true,
+                    pointBackgroundColor: '#00f0ff'
+                }]
+            },
+            options: { ...chartOptions }
+        });
+
+        // Current Chart
+        const currentChart = new Chart(document.getElementById('currentChart'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Current',
+                    data: [],
+                    borderColor: '#ff8800',
+                    backgroundColor: 'rgba(255, 136, 0, 0.05)',
+                    fill: true,
+                    pointBackgroundColor: '#ff8800'
+                }]
+            },
+            options: { ...chartOptions }
+        });
+
+        const MAX_CHART_POINTS = 50;
+
+        function addChartData(chart, label, value) {
+            chart.data.labels.push(label);
+            chart.data.datasets[0].data.push(value);
+            if (chart.data.labels.length > MAX_CHART_POINTS) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+            chart.update('none');
+        }
+
+        // ===================================================================
+        //  UPDATE UI FUNCTIONS
+        // ===================================================================
+        function updateValue(elementId, value, decimals = 2) {
+            const el = document.getElementById(elementId);
+            const newVal = Number(value).toFixed(decimals);
+            if (el.textContent !== newVal) {
+                el.textContent = newVal;
+                el.classList.add('flash');
+                setTimeout(() => el.classList.remove('flash'), 500);
+            }
+        }
+
+        function updateGauge(gaugeId, textId, value, maxValue) {
+            const percentage = Math.min((value / maxValue) * 100, 100);
+            const dashOffset = 188 - (188 * percentage / 100);
+            document.getElementById(gaugeId).setAttribute('stroke-dashoffset', dashOffset);
+            document.getElementById(textId).textContent = Math.round(percentage) + '%';
+        }
+
+        function formatUptime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return `${h}h ${m}m ${s}s`;
+        }
+
+        // Data log storage
+        const logEntries = [];
+        const MAX_LOG_ENTRIES = 20;
+
+        function addLogEntry(data) {
+            const now = new Date();
+            const time = now.toLocaleTimeString();
+
+            logEntries.unshift({
+                time: time,
+                flow: data.flowRate || 0,
+                current: data.currentAmps || 0,
+                power: data.power || 0,
+                total: data.totalLiters || 0
+            });
+
+            if (logEntries.length > MAX_LOG_ENTRIES) {
+                logEntries.pop();
+            }
+
+            const tbody = document.getElementById('logTableBody');
+            tbody.innerHTML = logEntries.map(entry => `
+                <tr>
+                    <td>${entry.time}</td>
+                    <td>${entry.flow.toFixed(2)}</td>
+                    <td>${entry.current.toFixed(3)}</td>
+                    <td>${entry.power.toFixed(2)}</td>
+                    <td>${entry.total.toFixed(3)}</td>
+                </tr>
+            `).join('');
+        }
+
+        // ===================================================================
+        //  FIREBASE REAL-TIME LISTENERS
+        // ===================================================================
+        let isConnected = false;
+
+        // Listen for connection state
+        database.ref('.info/connected').on('value', (snap) => {
+            const badge = document.getElementById('statusBadge');
+            const text = document.getElementById('statusText');
+            if (snap.val() === true) {
+                isConnected = true;
+                badge.classList.remove('offline');
+                text.textContent = 'CONNECTED';
+            } else {
+                isConnected = false;
+                badge.classList.add('offline');
+                text.textContent = 'OFFLINE';
+            }
+        });
+
+        // Listen for sensor data
+        database.ref('/flowsense/sensors').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (!data) return;
+
+            const flow = data.flow || {};
+            const current = data.current || {};
+
+            const now = new Date();
+            const timeLabel = now.toLocaleTimeString('en-US', { hour12: false });
+
+            // Update metric cards
+            updateValue('flowRate', flow.flowRate || 0, 2);
+            updateValue('totalLiters', flow.totalLiters || 0, 3);
+            updateValue('currentAmps', current.amps || 0, 3);
+            updateValue('power', current.power || 0, 2);
+            updateValue('voltage', current.voltage || 0, 1);
+            updateValue('energy', current.energy || 0, 4);
+
+            // Update charts
+            addChartData(flowChart, timeLabel, flow.flowRate || 0);
+            addChartData(currentChart, timeLabel, current.amps || 0);
+
+            // Update gauges (max flow = 30 L/min, max current = 5A)
+            updateGauge('flowGauge', 'flowGaugeText', flow.flowRate || 0, 30);
+            updateGauge('currentGauge', 'currentGaugeText', current.amps || 0, 5);
+
+            // Add log entry
+            addLogEntry({
+                flowRate: flow.flowRate || 0,
+                currentAmps: current.amps || 0,
+                power: current.power || 0,
+                totalLiters: flow.totalLiters || 0
+            });
+
+            // Alert check
+            const alertBar = document.getElementById('alertBar');
+            const alertText = document.getElementById('alertText');
+            if ((current.amps || 0) > 4) {
+                alertBar.classList.add('show');
+                alertText.textContent = `⚠️ HIGH CURRENT ALERT: ${current.amps.toFixed(2)}A detected!`;
+            } else if ((flow.flowRate || 0) > 25) {
+                alertBar.classList.add('show');
+                alertText.textContent = `⚠️ HIGH FLOW ALERT: ${flow.flowRate.toFixed(2)} L/min detected!`;
+            } else {
+                alertBar.classList.remove('show');
+            }
+        });
+
+        // Listen for system data
+        database.ref('/flowsense/system').on('value', (snapshot) => {
+            const sys = snapshot.val();
+            if (!sys) return;
+
+            document.getElementById('sysStatus').textContent = (sys.status || '--').toUpperCase();
+            document.getElementById('sysIP').textContent = sys.ip || '--';
+            document.getElementById('sysUptime').textContent = formatUptime(sys.uptime || 0);
+            document.getElementById('sysRSSI').textContent = (sys.wifiRSSI || '--') + ' dBm';
+            document.getElementById('sysHeap').textContent = ((sys.freeHeap || 0) / 1024).toFixed(1) + ' KB';
+            document.getElementById('sysLastUpdate').textContent = sys.lastUpdate || '--';
+
+            // Update status badge based on device status
+            const badge = document.getElementById('statusBadge');
+            const text = document.getElementById('statusText');
+            if (sys.status === 'online') {
+                badge.classList.remove('offline');
+                text.textContent = 'ONLINE';
+            }
+        });
+
+        // ===================================================================
+        //  HANDLE VISIBILITY CHANGE (reconnect when tab becomes active)
+        // ===================================================================
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                database.goOnline();
+            }
+        });
+    </script>
+</body>
+</html>
